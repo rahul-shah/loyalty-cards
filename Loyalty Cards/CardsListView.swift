@@ -172,7 +172,7 @@ struct CardsListView: View {
                         .font(.system(size: 24))
                 }
             )
-            .searchable(text: $searchText, prompt: "Search cards", isPresented: $showSearch)
+            .searchable(text: $searchText, isPresented: $showSearch, prompt: "Search cards")
             .confirmationDialog("Profile Options", isPresented: $showingProfileMenu) {
                 Button("Sign Out", role: .destructive) {
                     signOut()
