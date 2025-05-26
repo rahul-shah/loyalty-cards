@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreData
+import AuthenticationServices
 
 struct CardsListView: View {
     @Environment(\.managedObjectContext) private var viewContext
@@ -8,10 +9,27 @@ struct CardsListView: View {
         animation: .default)
     private var cards: FetchedResults<LoyaltyCard>
     
+    @StateObject private var authManager = AuthenticationManager.shared
     @State private var showingAddCard = false
     @State private var selectedCard: LoyaltyCard?
     @State private var cardToDelete: LoyaltyCard?
     @State private var showingDeleteAlert = false
+    @State private var showingProfileMenu = false
+    @State private var searchText = ""
+    @State private var showSearch = false
+    @State private var scrollOffset: CGFloat = 0
+    @State private var previousScrollOffset: CGFloat = 0
+    
+    private var filteredCards: [LoyaltyCard] {
+        if searchText.isEmpty {
+            return Array(cards)
+        } else {
+            return cards.filter { card in
+                guard let name = card.name else { return false }
+                return name.lowercased().contains(searchText.lowercased())
+            }
+        }
+    }
     
     private func deleteCard(_ card: LoyaltyCard) {
         withAnimation {
@@ -24,26 +42,86 @@ struct CardsListView: View {
         }
     }
     
+    private func signOut() {
+        // Revoke Apple ID credential
+        if let userIdentifier = UserDefaults.standard.string(forKey: "appleUserIdentifier") {
+            ASAuthorizationAppleIDProvider().getCredentialState(forUserID: userIdentifier) { (credentialState, error) in
+                if credentialState == .authorized {
+                    // Clear user data
+                    UserDefaults.standard.removeObject(forKey: "appleUserIdentifier")
+                    UserDefaults.standard.removeObject(forKey: "userName")
+                    UserDefaults.standard.removeObject(forKey: "userEmail")
+                }
+            }
+        }
+        
+        // Sign out user
+        authManager.isAuthenticated = false
+    }
+    
     var body: some View {
         NavigationView {
             ZStack {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
-                        ForEach(cards) { card in
-                            Button(action: {
-                                selectedCard = card
-                            }) {
-                                StoredCardView(card: card)
-                            }
-                            .buttonStyle(.plain)
-                            .onLongPressGesture {
-                                cardToDelete = card
-                                showingDeleteAlert = true
-                            }
+                if filteredCards.isEmpty {
+                    if searchText.isEmpty {
+                        VStack(spacing: 20) {
+                            Image(systemName: "creditcard.fill")
+                                .font(.system(size: 64))
+                                .foregroundColor(.gray)
+                            Text("No Cards Added")
+                                .font(.title2)
+                                .foregroundColor(.gray)
+                            Text("Tap the + button below to add your first loyalty card")
+                                .font(.body)
+                                .foregroundColor(.gray)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal)
+                        }
+                    } else {
+                        VStack(spacing: 20) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 64))
+                                .foregroundColor(.gray)
+                            Text("No Results")
+                                .font(.title2)
+                                .foregroundColor(.gray)
+                            Text("No cards match your search")
+                                .font(.body)
+                                .foregroundColor(.gray)
                         }
                     }
-                    .padding(.vertical, 8)
-                    .padding(.bottom, 80) // Add padding for bottom bar
+                } else {
+                    ScrollView {
+                        GeometryReader { geometry in
+                            Color.clear.preference(key: ScrollOffsetPreferenceKey.self,
+                                value: geometry.frame(in: .named("scroll")).origin.y)
+                        }
+                        .frame(height: 0)
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(filteredCards) { card in
+                                Button(action: {
+                                    selectedCard = card
+                                }) {
+                                    StoredCardView(card: card)
+                                }
+                                .buttonStyle(.plain)
+                                .onLongPressGesture {
+                                    cardToDelete = card
+                                    showingDeleteAlert = true
+                                }
+                            }
+                        }
+                        .padding(.vertical, 8)
+                        .padding(.bottom, 80) // Add padding for bottom bar
+                    }
+                    .coordinateSpace(name: "scroll")
+                    .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showSearch = value > previousScrollOffset && abs(value - previousScrollOffset) > 10
+                            previousScrollOffset = value
+                        }
+                    }
                 }
                 
                 // Bottom Navigation Bar
@@ -79,15 +157,28 @@ struct CardsListView: View {
             }
             .navigationTitle("My Cards")
             .navigationBarItems(
-                leading: Button(action: {}) {
+                leading: Button(action: {
+                    showingProfileMenu = true
+                }) {
                     Image(systemName: "person.crop.circle")
                         .font(.system(size: 24))
                 },
-                trailing: Button(action: {}) {
-                    Image(systemName: "square.grid.2x2")
+                trailing: Button(action: {
+                    withAnimation {
+                        showSearch.toggle()
+                    }
+                }) {
+                    Image(systemName: "magnifyingglass")
                         .font(.system(size: 24))
                 }
             )
+            .searchable(text: $searchText, prompt: "Search cards", isPresented: $showSearch)
+            .confirmationDialog("Profile Options", isPresented: $showingProfileMenu) {
+                Button("Sign Out", role: .destructive) {
+                    signOut()
+                }
+                Button("Cancel", role: .cancel) {}
+            }
             .sheet(isPresented: $showingAddCard) {
                 AddCardView()
             }
@@ -114,36 +205,134 @@ struct StoredCardView: View {
     
     var brandColor: Color {
         switch card.name?.lowercased() {
+        // Supermarkets
         case "tesco clubcard":
             return Color(hex: "00539F") // Tesco blue
-        case "boots":
-            return Color(hex: "184290") // Boots blue
-        case "costa coffee":
-            return Color(hex: "642B2B") // Costa maroon
-        case "starbucks":
-            return Color(hex: "006241") // Starbucks green
         case "nectar (sainsbury's)":
             return Color(hex: "EC8A00") // Sainsbury's orange
         case "waitrose":
             return Color(hex: "86B847") // Waitrose green
-        case "marks & spencer":
+        case "marks & spencer sparks":
             return Color(hex: "C4CDD5") // M&S silver/gray
-        case "superdrug":
+        case "co-op membership":
+            return Color(hex: "00B1E7") // Co-op blue
+        case "iceland bonus card":
+            return Color(hex: "D10000") // Iceland red
+        case "lidl plus":
+            return Color(hex: "0050AA") // Lidl blue
+        case "morrisons more":
+            return Color(hex: "004F38") // Morrisons green
+        case "asda rewards":
+            return Color(hex: "78BE20") // Asda green
+            
+        // Health & Beauty
+        case "boots advantage":
+            return Color(hex: "184290") // Boots blue
+        case "superdrug health & beautycard":
             return Color(hex: "E31B23") // Superdrug red
         case "the body shop":
             return Color(hex: "004236") // Body Shop green
+        case "holland & barrett":
+            return Color(hex: "00594C") // Holland & Barrett green
+            
+        // Food & Drink
+        case "costa club":
+            return Color(hex: "642B2B") // Costa maroon
+        case "starbucks rewards":
+            return Color(hex: "006241") // Starbucks green
         case "nando's":
             return Color(hex: "7C2529") // Nando's red
-        case "pret a manger":
+        case "pret coffee subscription":
             return Color(hex: "B01F24") // Pret red
-        case "greggs":
+        case "greggs rewards":
             return Color(hex: "00558C") // Greggs blue
-        case "h&m":
+        case "subway rewards":
+            return Color(hex: "008C15") // Subway green
+        case "pizza express club":
+            return Color(hex: "00205B") // Pizza Express blue
+        case "itsu":
+            return Color(hex: "FF0000") // itsu red
+        case "wasabi":
+            return Color(hex: "A0C03B") // Wasabi green
+        case "yo! sushi":
+            return Color(hex: "FF0000") // YO! red
+            
+        // Fashion & Department Stores
+        case "h&m member":
             return Color(hex: "E50010") // H&M red
-        case "john lewis":
+        case "john lewis my john lewis":
             return Color(hex: "85754E") // John Lewis gold
         case "argos":
             return Color(hex: "D42114") // Argos red
+        case "primark rewards":
+            return Color(hex: "0088CC") // Primark blue
+        case "uniqlo":
+            return Color(hex: "FF0000") // Uniqlo red
+        case "zara":
+            return Color(hex: "000000") // Zara black
+        case "new look":
+            return Color(hex: "D6168B") // New Look pink
+        case "river island":
+            return Color(hex: "000000") // River Island black
+        case "tk maxx treasure":
+            return Color(hex: "D4002A") // TK Maxx red
+        case "house of fraser recognition":
+            return Color(hex: "000000") // House of Fraser black
+            
+        // Home & DIY
+        case "b&q club":
+            return Color(hex: "F7A600") // B&Q orange
+        case "homebase":
+            return Color(hex: "00923F") // Homebase green
+        case "dunelm":
+            return Color(hex: "EE3124") // Dunelm red
+        case "ikea family":
+            return Color(hex: "0051BA") // IKEA blue
+        case "wilko":
+            return Color(hex: "CC0033") // Wilko red
+        case "the range":
+            return Color(hex: "0066B3") // The Range blue
+            
+        // Books & Entertainment
+        case "waterstones plus":
+            return Color(hex: "000000") // Waterstones black
+        case "whsmith":
+            return Color(hex: "D42114") // WHSmith red
+        case "game reward":
+            return Color(hex: "6C2C8F") // GAME purple
+        case "hmv pure":
+            return Color(hex: "FF1C26") // HMV red
+            
+        // Sports & Outdoors
+        case "sports direct":
+            return Color(hex: "0C1C8C") // Sports Direct blue
+        case "decathlon":
+            return Color(hex: "0082C3") // Decathlon blue
+        case "go outdoors":
+            return Color(hex: "004B8D") // GO Outdoors blue
+        case "jd sports":
+            return Color(hex: "000000") // JD black
+            
+        // Electronics & Mobile
+        case "currys perks":
+            return Color(hex: "000000") // Currys black
+        case "o2 priority":
+            return Color(hex: "0019A5") // O2 blue
+        case "three rewards":
+            return Color(hex: "4B0082") // Three purple
+        case "vodafone veryme":
+            return Color(hex: "E60000") // Vodafone red
+            
+        // Others
+        case "pets at home vip":
+            return Color(hex: "00A0DF") // Pets at Home blue
+        case "paperchase":
+            return Color(hex: "E31C79") // Paperchase pink
+        case "ryman":
+            return Color(hex: "004B8D") // Ryman blue
+        case "robert dyas":
+            return Color(hex: "004F9F") // Robert Dyas blue
+            
         default:
             return Color(hex: "333333") // Default dark gray
         }
@@ -259,5 +448,14 @@ extension View {
 struct CardsListView_Previews: PreviewProvider {
     static var previews: some View {
         CardsListView()
+    }
+}
+
+// Preference key for tracking scroll offset
+struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 } 

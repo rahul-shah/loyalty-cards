@@ -2,48 +2,31 @@ import SwiftUI
 import AuthenticationServices
 
 struct LoginView: View {
-    @State private var username = ""
-    @State private var password = ""
-    @State private var isLoggedIn = false
+    @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var authManager = AuthenticationManager.shared
     @State private var showError = false
     @State private var errorMessage = ""
-    @Environment(\.colorScheme) private var colorScheme
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 25) {
+            VStack(spacing: 30) {
+                Spacer()
+                
                 Image(systemName: "creditcard.fill")
                     .resizable()
                     .frame(width: 80, height: 60)
                     .foregroundColor(.accentColor)
-                    .padding(.bottom, 20)
                 
-                Text("Welcome Back")
-                    .font(.title)
-                    .fontWeight(.bold)
+                Text("Loyalty Cards")
+                    .font(.system(size: 36, weight: .bold))
                 
-                VStack(spacing: 20) {
-                    TextField("Username", text: $username)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .autocapitalization(.none)
-                    
-                    SecureField("Password", text: $password)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                    
-                    Button(action: handleLogin) {
-                        Text("Sign In")
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.accentColor)
-                            .cornerRadius(10)
-                    }
-                }
-                .padding(.horizontal, 30)
-                
-                Text("Or")
+                Text("Store all your loyalty cards in one place")
+                    .font(.title3)
                     .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                
+                Spacer()
                 
                 SignInWithAppleButton(
                     .signIn,
@@ -57,36 +40,83 @@ struct LoginView: View {
                 .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                 .frame(height: 50)
                 .padding(.horizontal, 30)
-                
-                Spacer()
-            }
-            .padding(.top, 50)
-            .alert("Error", isPresented: $showError) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(errorMessage)
-            }
-            .fullScreenCover(isPresented: $isLoggedIn) {
-                CardsListView()
+                .padding(.bottom, 50)
             }
         }
-    }
-    
-    private func handleLogin() {
-        // Add your login validation logic here
-        // For now, we'll just simulate a successful login
-        isLoggedIn = true
+        .fullScreenCover(isPresented: $authManager.isAuthenticated) {
+            CardsListView()
+        }
+        .alert("Sign In Error", isPresented: $showError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage)
+        }
     }
     
     private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
         switch result {
         case .success(let auth):
-            if let _ = auth.credential as? ASAuthorizationAppleIDCredential {
-                isLoggedIn = true
+            if let appleIDCredential = auth.credential as? ASAuthorizationAppleIDCredential {
+                // Store user identifier
+                let userId = appleIDCredential.user
+                UserDefaults.standard.set(userId, forKey: "appleUserIdentifier")
+                
+                // Store user name if provided
+                if let fullName = appleIDCredential.fullName {
+                    let userName = [fullName.givenName, fullName.familyName]
+                        .compactMap { $0 }
+                        .joined(separator: " ")
+                    if !userName.isEmpty {
+                        UserDefaults.standard.set(userName, forKey: "userName")
+                    }
+                }
+                
+                // Store email if provided
+                if let email = appleIDCredential.email {
+                    UserDefaults.standard.set(email, forKey: "userEmail")
+                }
+                
+                // Set authentication state
+                authManager.isAuthenticated = true
             }
         case .failure(let error):
             errorMessage = error.localizedDescription
             showError = true
+        }
+    }
+}
+
+class AuthenticationManager: ObservableObject {
+    static let shared = AuthenticationManager()
+    
+    @Published var isAuthenticated: Bool {
+        didSet {
+            UserDefaults.standard.set(isAuthenticated, forKey: "isAuthenticated")
+        }
+    }
+    
+    private init() {
+        // Check if user was previously authenticated
+        self.isAuthenticated = UserDefaults.standard.bool(forKey: "isAuthenticated")
+        
+        // Check for existing Apple ID credential
+        if let userIdentifier = UserDefaults.standard.string(forKey: "appleUserIdentifier") {
+            let appleIDProvider = ASAuthorizationAppleIDProvider()
+            appleIDProvider.getCredentialState(forUserID: userIdentifier) { credentialState, error in
+                DispatchQueue.main.async {
+                    switch credentialState {
+                    case .authorized:
+                        self.isAuthenticated = true
+                    case .revoked, .notFound:
+                        self.isAuthenticated = false
+                        UserDefaults.standard.removeObject(forKey: "appleUserIdentifier")
+                        UserDefaults.standard.removeObject(forKey: "userName")
+                        UserDefaults.standard.removeObject(forKey: "userEmail")
+                    default:
+                        break
+                    }
+                }
+            }
         }
     }
 }

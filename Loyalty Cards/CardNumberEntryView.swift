@@ -5,6 +5,7 @@ struct CardNumberEntryView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     @State private var cardNumber = ""
+    @State private var customName = ""
     @State private var showError = false
     let onComplete: () -> Void
     
@@ -34,6 +35,18 @@ struct CardNumberEntryView: View {
                 .padding(.horizontal)
                 .padding(.top, 20)
                 
+                // Custom name field for generic cards
+                if retailer.isGeneric {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Card Name")
+                            .foregroundColor(.gray)
+                        TextField("Enter the name of your loyalty card", text: $customName)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                            .autocapitalization(.words)
+                    }
+                    .padding(.horizontal)
+                }
+                
                 // Card number entry
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Card Number")
@@ -43,7 +56,6 @@ struct CardNumberEntryView: View {
                         .keyboardType(.numberPad)
                 }
                 .padding(.horizontal)
-                .padding(.top, 20)
                 
                 Spacer()
                 
@@ -56,11 +68,11 @@ struct CardNumberEntryView: View {
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(
-                            cardNumber.isEmpty ? Color.gray : Color.blue
+                            isFormValid ? Color.blue : Color.gray
                         )
                         .cornerRadius(10)
                 }
-                .disabled(cardNumber.isEmpty)
+                .disabled(!isFormValid)
                 .padding()
             }
             .navigationTitle("Add Card Details")
@@ -77,10 +89,17 @@ struct CardNumberEntryView: View {
         }
     }
     
+    private var isFormValid: Bool {
+        if retailer.isGeneric {
+            return !cardNumber.isEmpty && !customName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        return !cardNumber.isEmpty
+    }
+    
     private func addCard() {
         let card = LoyaltyCard(context: viewContext)
         card.id = UUID()
-        card.name = retailer.name
+        card.name = retailer.isGeneric ? customName : retailer.name
         card.category = retailer.category
         card.logoName = retailer.logoName
         card.backgroundColor = retailer.backgroundColor.description
@@ -106,7 +125,8 @@ struct CardNumberEntryView: View {
             name: "Sample Store",
             category: "Retail",
             logoName: "cart.fill",
-            backgroundColor: .blue
+            backgroundColor: .blue,
+            isGeneric: false
         ),
         onComplete: {}
     )

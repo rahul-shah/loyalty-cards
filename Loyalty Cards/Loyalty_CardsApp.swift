@@ -14,11 +14,11 @@ struct Loyalty_CardsApp: App {
     var body: some Scene {
         WindowGroup {
             #if os(iOS)
-            LoginView()
+            CardsListView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .preferredColorScheme(.dark)
             #else
-            LoginView()
+            CardsListView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
                 .frame(minWidth: 800, minHeight: 600)
                 .preferredColorScheme(.dark)
