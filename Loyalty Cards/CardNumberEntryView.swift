@@ -6,6 +6,7 @@ struct CardNumberEntryView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @State private var cardNumber = ""
     @State private var customName = ""
+    @State private var selectedColor = Color.blue
     @State private var showError = false
     let onComplete: () -> Void
     
@@ -13,27 +14,29 @@ struct CardNumberEntryView: View {
         NavigationView {
             VStack(spacing: 20) {
                 // Retailer header
-                HStack {
-                    Circle()
-                        .fill(retailer.backgroundColor)
-                        .frame(width: 60, height: 60)
-                        .overlay(
-                            Image(systemName: retailer.logoName)
-                                .foregroundColor(.white)
-                                .font(.system(size: 30))
-                        )
-                    
-                    VStack(alignment: .leading) {
-                        Text(retailer.name)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        Text(retailer.category)
-                            .foregroundColor(.gray)
+                if !retailer.isGeneric {
+                    HStack {
+                        Circle()
+                            .fill(retailer.backgroundColor)
+                            .frame(width: 60, height: 60)
+                            .overlay(
+                                Image(systemName: retailer.logoName)
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 30))
+                            )
+                        
+                        VStack(alignment: .leading) {
+                            Text(retailer.name)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                            Text(retailer.category)
+                                .foregroundColor(.gray)
+                        }
+                        Spacer()
                     }
-                    Spacer()
+                    .padding(.horizontal)
+                    .padding(.top, 20)
                 }
-                .padding(.horizontal)
-                .padding(.top, 20)
                 
                 // Custom name field for generic cards
                 if retailer.isGeneric {
@@ -43,6 +46,25 @@ struct CardNumberEntryView: View {
                         TextField("Enter the name of your loyalty card", text: $customName)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .autocapitalization(.words)
+                    }
+                    .padding(.horizontal)
+                    
+                    // Color picker for generic cards
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Card Color")
+                            .foregroundColor(.gray)
+                        ColorPicker("Select card color", selection: $selectedColor)
+                            .labelsHidden()
+                        
+                        // Color preview
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(selectedColor)
+                            .frame(height: 60)
+                            .overlay(
+                                Image(systemName: "creditcard.fill")
+                                    .foregroundColor(.white)
+                                    .font(.system(size: 30))
+                            )
                     }
                     .padding(.horizontal)
                 }
@@ -75,7 +97,7 @@ struct CardNumberEntryView: View {
                 .disabled(!isFormValid)
                 .padding()
             }
-            .navigationTitle("Add Card Details")
+            .navigationTitle(retailer.isGeneric ? "Add Custom Card" : "Add Card Details")
             .navigationBarItems(
                 leading: Button("Cancel") {
                     dismiss()
@@ -101,8 +123,8 @@ struct CardNumberEntryView: View {
         card.id = UUID()
         card.name = retailer.isGeneric ? customName : retailer.name
         card.category = retailer.category
-        card.logoName = retailer.logoName
-        card.backgroundColor = retailer.backgroundColor.description
+        card.logoName = retailer.isGeneric ? "creditcard.fill" : retailer.logoName
+        card.backgroundColor = retailer.isGeneric ? selectedColor.description : retailer.backgroundColor.description
         card.cardNumber = cardNumber
         card.location = "United Kingdom"
         card.stamps = 0
