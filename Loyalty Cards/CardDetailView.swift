@@ -6,6 +6,7 @@ struct CardDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.managedObjectContext) private var viewContext
     @State private var showingDeleteAlert = false
+    @State private var showingNotesView = false
     
     var backgroundColor: Color {
         Color(card.backgroundColor ?? "blue")
@@ -70,13 +71,20 @@ struct CardDetailView: View {
                             .cornerRadius(12)
                         }
                         
-                        Button(action: {}) {
+                        Button(action: {
+                            showingNotesView = true
+                        }) {
                             HStack {
                                 Image(systemName: "note.text")
                                     .foregroundColor(.primary)
                                 Text("Notes")
                                     .foregroundColor(.primary)
                                 Spacer()
+                                if let notes = card.notes, !notes.isEmpty {
+                                    Text(notes.prefix(30) + (notes.count > 30 ? "..." : ""))
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(1)
+                                }
                                 Image(systemName: "chevron.right")
                                     .foregroundColor(.secondary)
                             }
@@ -112,6 +120,9 @@ struct CardDetailView: View {
                     .foregroundColor(.primary)
                 }
             )
+            .sheet(isPresented: $showingNotesView) {
+                CardNotesView(card: card)
+            }
             .alert("Delete Card", isPresented: $showingDeleteAlert) {
                 Button("Cancel", role: .cancel) {}
                 Button("Delete", role: .destructive) {
