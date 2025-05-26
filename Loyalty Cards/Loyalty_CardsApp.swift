@@ -9,20 +9,12 @@ import SwiftUI
 
 @main
 struct Loyalty_CardsApp: App {
-    @StateObject private var persistenceController = PersistenceController.shared
+    let persistenceController = PersistenceController.shared
     
     var body: some Scene {
         WindowGroup {
-            #if os(iOS)
-            CardsListView()
+            LoginView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
-                .preferredColorScheme(.dark)
-            #else
-            CardsListView()
-                .environment(\.managedObjectContext, persistenceController.container.viewContext)
-                .frame(minWidth: 800, minHeight: 600)
-                .preferredColorScheme(.dark)
-            #endif
         }
     }
 }

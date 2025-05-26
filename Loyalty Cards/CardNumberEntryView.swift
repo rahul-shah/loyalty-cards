@@ -124,7 +124,29 @@ struct CardNumberEntryView: View {
         card.name = retailer.isGeneric ? customName : retailer.name
         card.category = retailer.category
         card.logoName = retailer.isGeneric ? "creditcard.fill" : retailer.logoName
-        card.backgroundColor = retailer.isGeneric ? selectedColor.description : retailer.backgroundColor.description
+        
+        // Convert color to hex string for storage
+        if retailer.isGeneric {
+            let uiColor = UIColor(selectedColor)
+            var red: CGFloat = 0
+            var green: CGFloat = 0
+            var blue: CGFloat = 0
+            var alpha: CGFloat = 0
+            uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+            let hex = String(format: "#%02X%02X%02X", Int(red * 255), Int(green * 255), Int(blue * 255))
+            card.backgroundColor = hex
+        } else {
+            // For retailer cards, convert the background color to hex format
+            let uiColor = UIColor(retailer.backgroundColor)
+            var red: CGFloat = 0
+            var green: CGFloat = 0
+            var blue: CGFloat = 0
+            var alpha: CGFloat = 0
+            uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+            let hex = String(format: "#%02X%02X%02X", Int(red * 255), Int(green * 255), Int(blue * 255))
+            card.backgroundColor = hex
+        }
+        
         card.cardNumber = cardNumber
         card.location = "United Kingdom"
         card.stamps = 0

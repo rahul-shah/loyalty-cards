@@ -6,8 +6,12 @@ class PersistenceController: ObservableObject {
     
     let container: NSPersistentContainer
     
-    init() {
+    init(inMemory: Bool = false) {
         container = NSPersistentContainer(name: "LoyaltyCard")
+        
+        if inMemory {
+            container.persistentStoreDescriptions.first?.url = URL(fileURLWithPath: "/dev/null")
+        }
         
         if let storeURL = container.persistentStoreDescriptions.first?.url {
             let storeDirectory = storeURL.deletingLastPathComponent()

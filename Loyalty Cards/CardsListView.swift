@@ -205,7 +205,10 @@ struct StoredCardView: View {
     
     var brandColor: Color {
         if let colorString = card.backgroundColor {
-            return Color(colorString)
+            if colorString.hasPrefix("#") {
+                // Handle hex color string
+                return Color(hex: String(colorString.dropFirst()))
+            }
         }
         return Color(hex: "333333") // Default dark gray
     }
